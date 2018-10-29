@@ -18,9 +18,11 @@ import com.netvirta.netvisioncamera2.CameraUtils.areDimensionsSwapped
 import kotlinx.android.synthetic.main.activity_camera.*
 import org.opencv.core.Mat
 import org.opencv.imgproc.Imgproc
+import java.nio.ByteBuffer
 import java.util.*
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import android.media.Image.Plane
 
 
 /**
@@ -36,6 +38,10 @@ class CameraActivity : AppCompatActivity() {
     private var cameraDevice: CameraDevice? = null
     private lateinit var previewSize: Size
 
+    /**
+     * Hold on to the surface with texture for C++ processing
+     */
+    private var surface: Surface? = null
     /**
      * [CameraDevice.StateCallback] is called when [CameraDevice] changes its state.
      */
@@ -114,7 +120,7 @@ class CameraActivity : AppCompatActivity() {
             texture.setDefaultBufferSize(previewSize.width, previewSize.height)
 
             // This is the output Surface we need to start preview.
-            val surface = Surface(texture)
+            surface = Surface(texture)
 
             // We set up a CaptureRequest.Builder with the output Surface.
             previewRequestBuilder = cameraDevice!!.createCaptureRequest(
@@ -139,8 +145,6 @@ class CameraActivity : AppCompatActivity() {
                                 CaptureRequest.CONTROL_AF_MODE,
                                 CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
                             )
-                            // Flash is automatically enabled when necessary.
-//                            setAutoFlash(previewRequestBuilder)
 
                             // Finally, we start displaying the camera preview.
                             previewRequest = previewRequestBuilder.build()
@@ -155,7 +159,7 @@ class CameraActivity : AppCompatActivity() {
                     }
 
                     override fun onConfigureFailed(session: CameraCaptureSession) {
-//                        activity.showToast("Failed")
+                        Log.e("Camera", "Failed")
                     }
                 }, null
             )
@@ -337,13 +341,23 @@ class CameraActivity : AppCompatActivity() {
 
             // Convert from yuv to correct format
             val mYuvMat = ImageUtils.imageToMat(image)
-            val greyMat = Mat()
-            val rgbaMat = Mat()
-            Imgproc.cvtColor(mYuvMat, greyMat, Imgproc.COLOR_YUV2GRAY_I420)
-            Imgproc.cvtColor(mYuvMat, rgbaMat, Imgproc.COLOR_YUV2RGB_I420)
+
+            val Y = image.planes[0]
+            val U = image.planes[1]
+            val V = image.planes[2]
+
+            val Yb = Y.buffer.remaining()
+            val Ub = U.buffer.remaining()
+            val Vb = V.buffer.remaining()
+
+            val data = ByteArray(Yb + Ub + Vb)
+
+            Y.buffer.get(data, 0, Yb)
+            U.buffer.get(data, Yb, Ub)
+            V.buffer.get(data, Yb + Ub, Vb)
 
             // process this image in JNI
-            faceDetection(rgbaMat.nativeObjAddr)
+            faceDetection(image.width, image.height, data, surface!!)
 
             // Make sure we close the image
             image.close()
@@ -353,7 +367,7 @@ class CameraActivity : AppCompatActivity() {
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    private external fun faceDetection(rgbaAddress: Long)
+    private external fun faceDetection(srcWidth: Int, srcHeight: Int, srcBuffer: ByteArray, surface: Surface)
 
     override fun onPause() {
         stopBackgroundThread()

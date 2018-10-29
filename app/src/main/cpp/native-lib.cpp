@@ -1,7 +1,6 @@
 #include <jni.h>
 #include <string>
 #include "opencv2/opencv.hpp"
-
 #include <string>
 #include <vector>
 
@@ -16,10 +15,15 @@ void detect(Mat &frame);
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_netvirta_netvisioncamera2_CameraActivity_faceDetection(
-        JNIEnv *, jclass, jlong rgbaAddress) {
+        JNIEnv *env,
+        jobject obj,
+        jint srcWidth,
+        jint srcHeight,
+        jbyteArray srcBuffer,
+        jobject surface) {
 
-    Mat &frame = *(Mat *) rgbaAddress;
-    detect(frame);
+//    Mat &frame = *(Mat *) rgbaAddress;
+//    detect(frame);
 }
 
 
