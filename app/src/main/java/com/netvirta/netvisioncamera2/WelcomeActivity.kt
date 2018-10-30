@@ -20,7 +20,7 @@ class WelcomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_welcome)
 
-        start_button?.setOnClickListener {
+        proceed_button?.setOnClickListener {
             val permission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             if (permission != PackageManager.PERMISSION_GRANTED) {
                 requestCameraPermission()
