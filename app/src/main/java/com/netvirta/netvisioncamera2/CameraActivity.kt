@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.*
 import android.hardware.camera2.*
+import android.media.Image
 import android.media.ImageReader
 import android.os.Bundle
 import android.os.Handler
@@ -16,13 +17,9 @@ import android.view.Surface
 import android.view.TextureView
 import com.netvirta.netvisioncamera2.CameraUtils.areDimensionsSwapped
 import kotlinx.android.synthetic.main.activity_camera.*
-import org.opencv.core.Mat
-import org.opencv.imgproc.Imgproc
-import java.nio.ByteBuffer
 import java.util.*
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import android.media.Image.Plane
 
 
 /**
@@ -336,38 +333,32 @@ class CameraActivity : AppCompatActivity() {
     private val imageAvailableListener: ImageReader.OnImageAvailableListener =
         ImageReader.OnImageAvailableListener { ir ->
 
-            // Get the next image from the queue
-            val image = ir.acquireNextImage()
+            val image: Image?
+            val result: String
 
-            // Convert from yuv to correct format
-            val mYuvMat = ImageUtils.imageToMat(image)
+            try {
+                // Get the next image from the queue
+                image = ir.acquireLatestImage()
+                if (image == null) {
+                    return@OnImageAvailableListener
+                }
+                val fmt = ir.imageFormat
 
-            val Y = image.planes[0]
-            val U = image.planes[1]
-            val V = image.planes[2]
+                Log.d(javaClass.simpleName, "image format:$fmt")
 
-            val Yb = Y.buffer.remaining()
-            val Ub = U.buffer.remaining()
-            val Vb = V.buffer.remaining()
+                if (surface == null)
+                    return@OnImageAvailableListener
 
-            val data = ByteArray(Yb + Ub + Vb)
+                result = JNIUtils.detectLane(image, surface!!)
 
-            Y.buffer.get(data, 0, Yb)
-            U.buffer.get(data, Yb, Ub)
-            V.buffer.get(data, Yb + Ub, Vb)
-
-            // process this image in JNI
-            faceDetection(image.width, image.height, data, surface!!)
+            } catch (e: IllegalStateException) {
+                Log.e(javaClass.simpleName, "Too many images queued for saving, dropping image for request: ")
+                return@OnImageAvailableListener
+            }
 
             // Make sure we close the image
             image.close()
         }
-
-    /**
-     * A native method that is implemented by the 'native-lib' native library,
-     * which is packaged with this application.
-     */
-    private external fun faceDetection(srcWidth: Int, srcHeight: Int, srcBuffer: ByteArray, surface: Surface)
 
     override fun onPause() {
         stopBackgroundThread()
@@ -425,12 +416,5 @@ class CameraActivity : AppCompatActivity() {
          * Max preview height that is guaranteed by Camera2 API
          */
         const val MAX_PREVIEW_HEIGHT = 1080
-
-        init {
-            /**
-             * Used to load the 'native-lib' library on application startup.
-             */
-            System.loadLibrary("native-lib")
-        }
     }
 }
