@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">NetVisionCamera2</string>
+    <string name="welcome_description">
+        Enjoy the experience of your High Definition Camera and Multiple Detectors with a click of a button
+    </string>
+    <string name="welcome_to_netvision">Welcome to NetVision!</string>
+    <string name="proceed">Proceed</string>
+    <string name="switch_camera">Switch Camera</string>
 </resources>
