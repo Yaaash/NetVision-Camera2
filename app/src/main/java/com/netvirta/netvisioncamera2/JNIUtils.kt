@@ -1,11 +1,14 @@
 package com.netvirta.netvisioncamera2
 
+import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.media.Image
-import android.util.Log
 import android.view.Surface
 import org.opencv.core.CvType
+import org.opencv.core.CvType.CV_8UC4
 import org.opencv.core.Mat
+import org.opencv.core.Size
+import org.opencv.imgproc.Imgproc
 import java.nio.ByteBuffer
 
 
@@ -86,13 +89,11 @@ object JNIUtils {
      * YUV_420_888, surface must be YV12 and have been configured with
      * `configureSurface()`.
      */
-    fun detectLine(sourceImage: Image, surface: Surface): String {
+    fun detectLine(sourceImage: Image, surface: Surface, path: String): Mat {
 
         if (sourceImage.format != ImageFormat.YUV_420_888) {
             throw IllegalArgumentException("sourceImage must have format YUV_420_888.")
         }
-
-        Log.e("Yashika", "After YUV ")
 
         val planes = sourceImage.planes
         // Spec guarantees that planes[0] is luma and has pixel stride of 1.
@@ -103,42 +104,15 @@ object JNIUtils {
                 "sourceImage chroma plane must have a pixel stride of 1 or 2: got " + planes[1].pixelStride
             )
         }
-        return detectLine(
-            sourceImage.width, sourceImage.height, planes[0].buffer, surface
+        val destinationMat = Mat(sourceImage.height, sourceImage.width, CV_8UC4)
+        detectLine(
+            sourceImage.width, sourceImage.height, planes[0].buffer, surface, path, destinationMat.nativeObjAddr
         )
+        return destinationMat
     }
 
     private external fun detectLine(
         width: Int, height: Int, imageBuffer: ByteBuffer,
-        surface: Surface
-    ): String
-
-    external fun GrayscaleDisplay(
-        srcWidth: Int,
-        srcHeight: Int,
-        rowStride: Int,
-        srcBuffer: ByteBuffer,
-        surface: Surface
-    )
-
-    external fun RGBADisplay(
-        srcWidth: Int,
-        srcHeight: Int,
-        Y_rowStride: Int,
-        Y_Buffer: ByteBuffer,
-        UV_rowStride: Int,
-        U_Buffer: ByteBuffer,
-        V_Buffer: ByteBuffer,
-        surface: Surface
-    )
-
-    external fun RGBADisplay2(
-        srcWidth: Int,
-        srcHeight: Int,
-        Y_rowStride: Int,
-        Y_Buffer: ByteBuffer,
-        U_Buffer: ByteBuffer,
-        V_Buffer: ByteBuffer,
-        surface: Surface
+        surface: Surface, filePath: String, destinationMatAddr : Long
     )
 }

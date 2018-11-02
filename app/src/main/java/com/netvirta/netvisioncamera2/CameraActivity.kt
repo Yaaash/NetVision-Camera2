@@ -18,15 +18,15 @@ package com.netvirta.netvisioncamera2
 
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
-import com.example.android.camera2basic.Camera2BasicFragment
+import com.example.android.camera2basic.CameraFragment
 
 class CameraActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_camera2)
+        setContentView(R.layout.activity_camera)
         savedInstanceState ?: supportFragmentManager.beginTransaction()
-            .replace(R.id.container, Camera2BasicFragment.newInstance())
+            .replace(R.id.container, CameraFragment.newInstance())
             .commit()
     }
 

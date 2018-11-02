@@ -16,7 +16,6 @@
 
 package com.example.android.camera2basic
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Context
@@ -26,6 +25,7 @@ import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.support.v4.app.ActivityCompat
@@ -35,14 +35,9 @@ import android.util.Size
 import android.util.SparseIntArray
 import android.view.*
 import android.widget.Toast
-import com.netvirta.netvisioncamera2.AutoFitTextureView
-import com.netvirta.netvisioncamera2.CompareSizesByArea
-import com.netvirta.netvisioncamera2.JNIUtils
-import com.netvirta.netvisioncamera2.R
-import kotlinx.android.synthetic.main.activity_camera.*
+import com.netvirta.netvisioncamera2.*
+import kotlinx.android.synthetic.main.fragment_camera.*
 import org.opencv.android.Utils
-import org.opencv.core.Mat
-import org.opencv.imgproc.Imgproc
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -52,7 +47,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.collections.ArrayList
 
-class Camera2BasicFragment : Fragment(), View.OnClickListener,
+class CameraFragment : Fragment(), View.OnClickListener,
     ActivityCompat.OnRequestPermissionsResultCallback {
 
     /**
@@ -107,19 +102,19 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
 
         override fun onOpened(cameraDevice: CameraDevice) {
             cameraOpenCloseLock.release()
-            this@Camera2BasicFragment.cameraDevice = cameraDevice
+            this@CameraFragment.cameraDevice = cameraDevice
             createCameraPreviewSession()
         }
 
         override fun onDisconnected(cameraDevice: CameraDevice) {
             cameraOpenCloseLock.release()
             cameraDevice.close()
-            this@Camera2BasicFragment.cameraDevice = null
+            this@CameraFragment.cameraDevice = null
         }
 
         override fun onError(cameraDevice: CameraDevice, error: Int) {
             onDisconnected(cameraDevice)
-            this@Camera2BasicFragment.activity?.finish()
+            this@CameraFragment.activity?.finish()
         }
 
     }
@@ -151,72 +146,21 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
     private val onImageAvailableListener = ImageReader.OnImageAvailableListener { ir ->
         backgroundHandler?.post {
             val image: Image?
-//            val result: String
-//
             try {
                 // Get the next image from the queue
                 image = ir.acquireLatestImage()
                 if (image == null) {
                     return@post
                 }
-                Toast.makeText(activity, "after acquire", Toast.LENGTH_SHORT).show()
+                // Process image
+                val result = JNIUtils.detectLine(image, surface!!, getFileName())
+                Toast.makeText(activity, "${result.cols()} + ${result.rows()}", Toast.LENGTH_LONG).show()
+                val bitmap = Bitmap.createBitmap(result.cols(), result.rows(), Bitmap.Config.ARGB_8888)
+                Utils.matToBitmap(result, bitmap)
 
-                val mYuvMat = JNIUtils.imageToMat(image)
-                val mat_out_gray = Mat()
-                val mat_out_rgb = Mat()
-                val greyMat = Mat()
-
-                // See if we should gray scale
-                Imgproc.cvtColor(mYuvMat, mat_out_gray, Imgproc.COLOR_YUV2GRAY_I420)
-                Imgproc.cvtColor(mYuvMat, mat_out_rgb, Imgproc.COLOR_YUV2RGB_I420)
-                val imageGray1 = Mat()
-
-                //mat canny image
-                val imageCny1 = Mat()
-
-                //mat canny image
-                val imageCny2 = Mat()
-
-                /////////////////////////////////////////////////////////////////
-
-                //Convert img1 into gray image
-                Imgproc.cvtColor(mat_out_rgb, imageGray1, Imgproc.COLOR_BGR2GRAY)
-
-                //Canny Edge Detection
-                Imgproc.Canny(imageGray1, imageCny1, 10.0, 100.0, 3, true)
-
-                // Update image
-                val bitmap = Bitmap.createBitmap(imageCny1.cols(), imageCny1.rows(), Bitmap.Config.ARGB_8888)
-                Utils.matToBitmap(imageCny1, bitmap)
                 activity?.runOnUiThread {
-                    imageView.setImageBitmap(bitmap)
+                    bitmapIV?.setImageBitmap(bitmap)
                 }
-
-                val Y_plane = image.planes[0]
-                val Y_rowStride = Y_plane.rowStride
-                val U_plane = image.planes[1]
-                val UV_rowStride = U_plane.rowStride  //in particular, uPlane.getRowStride() == vPlane.getRowStride()
-                val V_plane = image.planes[2]
-                JNIUtils.RGBADisplay(
-                    image.width,
-                    image.height,
-                    Y_rowStride,
-                    Y_plane.buffer,
-                    UV_rowStride,
-                    U_plane.buffer,
-                    V_plane.buffer,
-                    surface!!
-                )
-
-
-//                val fmt = ir.imageFormat
-//                Toast.makeText(activity, "image format:$fmt", Toast.LENGTH_SHORT).show()
-//
-//                Log.d(javaClass.simpleName, "image format:$fmt")
-//
-//
-//                result = JNIUtils.detectLine(image, surface!!)
-//                saveFile(image)
             } catch (e: IllegalStateException) {
                 Log.e(javaClass.simpleName, "Too many images queued for saving, dropping image for request: ")
                 return@post
@@ -226,6 +170,22 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
             // Make sure we close the image
             image.close()
         }
+    }
+
+    private fun getFileName(): String {
+        val file = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+        val fp = File(file, "DemoFile2.dat")
+
+//        val fList = file.listFiles()
+//        for (f in fList!!) {
+//            if (f.isFile) {
+//                Log.d(TAG, "bob file: " + f.toString())
+//            } else if (file.isDirectory) {
+//                Log.d(TAG, "bob dir: " + f.absolutePath)
+//            }
+//        }
+//        Toast.makeText(activity, file.toString(), Toast.LENGTH_LONG).show()
+        return fp.toString()
     }
 
     private fun saveFile(image: Image) {
@@ -354,7 +314,7 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? = inflater.inflate(R.layout.activity_camera, container, false)
+    ): View? = inflater.inflate(R.layout.fragment_camera, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         view.findViewById<View>(R.id.picture).setOnClickListener(this)
@@ -418,13 +378,14 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
                     Arrays.asList(*map.getOutputSizes(ImageFormat.YUV_420_888)),
                     CompareSizesByArea()
                 )
+
+
                 imageReader = ImageReader.newInstance(
                     largest.width, largest.height,
-                    ImageFormat.YUV_420_888, /*maxImages*/ 2
+                    ImageFormat.YUV_420_888, /*maxImages*/ 5
                 ).apply {
                     setOnImageAvailableListener(onImageAvailableListener, backgroundHandler)
                 }
-
                 // Find out if we need to swap dimension to get the preview size relative to sensor
                 // coordinate.
                 val displayRotation = activity?.windowManager?.defaultDisplay?.rotation
@@ -508,7 +469,7 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
     }
 
     /**
-     * Opens the camera specified by [Camera2BasicFragment.cameraId].
+     * Opens the camera specified by [CameraFragment.cameraId].
      */
     @SuppressLint("MissingPermission")
     private fun openCamera(width: Int, height: Int) {
@@ -837,7 +798,7 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
         /**
          * Tag for the [Log].
          */
-        private val TAG = "Camera2BasicFragment"
+        private val TAG = "CameraFragment"
 
         /**
          * Camera state: Showing camera preview.
@@ -931,6 +892,6 @@ class Camera2BasicFragment : Fragment(), View.OnClickListener,
         }
 
         @JvmStatic
-        fun newInstance(): Camera2BasicFragment = Camera2BasicFragment()
+        fun newInstance(): CameraFragment = CameraFragment()
     }
 }
