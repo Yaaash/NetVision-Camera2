@@ -2,6 +2,7 @@ package com.netvirta.netvisioncamera2
 
 import android.graphics.ImageFormat
 import android.media.Image
+import android.util.Log
 import android.view.Surface
 import org.opencv.core.CvType
 import org.opencv.core.Mat
@@ -81,31 +82,63 @@ object JNIUtils {
     }
 
     /**
-     * Use native code to copy the contents of src to dst. src must have format
-     * YUV_420_888, dst must be YV12 and have been configured with
+     * Use native code to copy the contents of sourceImage to surface. sourceImage must have format
+     * YUV_420_888, surface must be YV12 and have been configured with
      * `configureSurface()`.
      */
-    fun detectLane(src: Image, dst: Surface): String {
+    fun detectLine(sourceImage: Image, surface: Surface): String {
 
-        if (src.format != ImageFormat.YUV_420_888) {
-            throw IllegalArgumentException("src must have format YUV_420_888.")
+        if (sourceImage.format != ImageFormat.YUV_420_888) {
+            throw IllegalArgumentException("sourceImage must have format YUV_420_888.")
         }
-        val planes = src.planes
+
+        Log.e("Yashika", "After YUV ")
+
+        val planes = sourceImage.planes
         // Spec guarantees that planes[0] is luma and has pixel stride of 1.
         // It also guarantees that planes[1] and planes[2] have the same row and
         // pixel stride.
         if (planes[1].pixelStride != 1 && planes[1].pixelStride != 2) {
             throw IllegalArgumentException(
-                "src chroma plane must have a pixel stride of 1 or 2: got " + planes[1].pixelStride
+                "sourceImage chroma plane must have a pixel stride of 1 or 2: got " + planes[1].pixelStride
             )
         }
-        return detectLane(
-            src.width, src.height, planes[0].buffer, dst
+        return detectLine(
+            sourceImage.width, sourceImage.height, planes[0].buffer, surface
         )
     }
 
-    private external fun detectLane(
-        srcWidth: Int, srcHeight: Int, srcBuf: ByteBuffer,
-        dst: Surface
+    private external fun detectLine(
+        width: Int, height: Int, imageBuffer: ByteBuffer,
+        surface: Surface
     ): String
+
+    external fun GrayscaleDisplay(
+        srcWidth: Int,
+        srcHeight: Int,
+        rowStride: Int,
+        srcBuffer: ByteBuffer,
+        surface: Surface
+    )
+
+    external fun RGBADisplay(
+        srcWidth: Int,
+        srcHeight: Int,
+        Y_rowStride: Int,
+        Y_Buffer: ByteBuffer,
+        UV_rowStride: Int,
+        U_Buffer: ByteBuffer,
+        V_Buffer: ByteBuffer,
+        surface: Surface
+    )
+
+    external fun RGBADisplay2(
+        srcWidth: Int,
+        srcHeight: Int,
+        Y_rowStride: Int,
+        Y_Buffer: ByteBuffer,
+        U_Buffer: ByteBuffer,
+        V_Buffer: ByteBuffer,
+        surface: Surface
+    )
 }

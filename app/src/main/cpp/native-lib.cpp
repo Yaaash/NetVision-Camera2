@@ -1,7 +1,39 @@
 #include <jni.h>
-#include "native-lib.h"
+#include <opencv2/opencv.hpp>
+#include <android/native_window_jni.h>
 
-JNIEXPORT jstring JNICALL com_netvirta_netvisioncamera2_JNIUtils_detectLane(
+#include <string>
+#include <vector>
+#include <android/bitmap.h>
+#include <algorithm>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+
+using namespace cv;
+using namespace std;
+
+
+#ifndef int64_t
+#define int64_t long long
+#endif
+
+#ifndef uint8_t
+#define uint8_t unsigned char
+#endif
+
+#ifndef int32_t
+#define int32_t int
+#endif
+
+#ifndef uint32_t
+#define uint32_t unsigned int
+#endif
+
+extern "C" JNIEXPORT jstring
+JNICALL
+Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine(
         JNIEnv *env, jobject obj, jint srcWidth, jint srcHeight,
         jobject srcBuffer, jobject dstSurface) {
 
@@ -10,7 +42,6 @@ JNIEXPORT jstring JNICALL com_netvirta_netvisioncamera2_JNIUtils_detectLane(
     uint8_t *srcLumaPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(srcBuffer));
 
     if (srcLumaPtr == nullptr) {
-        LOGE("blit NULL pointer ERROR");
         return NULL;
     }
 
@@ -18,7 +49,7 @@ JNIEXPORT jstring JNICALL com_netvirta_netvisioncamera2_JNIUtils_detectLane(
     int dstHeight;
 
     cv::Mat mYuv(srcHeight + srcHeight / 2, srcWidth, CV_8UC1, srcLumaPtr);
-
+//
     ANativeWindow *win = ANativeWindow_fromSurface(env, dstSurface);
     ANativeWindow_acquire(win);
 
@@ -30,49 +61,50 @@ JNIEXPORT jstring JNICALL com_netvirta_netvisioncamera2_JNIUtils_detectLane(
     ANativeWindow_setBuffersGeometry(win, dstWidth, dstHeight, 0 /*format unchanged*/);
 
     if (int32_t err = ANativeWindow_lock(win, &buf, NULL)) {
-        LOGE("ANativeWindow_lock failed with error code %d\n", err);
+//        LOGE("ANativeWindow_lock failed with error code %d\n", err);
         ANativeWindow_release(win);
         return NULL;
     }
-
+//
     uint8_t *dstLumaPtr = reinterpret_cast<uint8_t *>(buf.bits);
     Mat dstRgba(dstHeight, buf.stride, CV_8UC4,
                 dstLumaPtr);        // TextureView buffer, use stride as width
     Mat srcRgba(srcHeight, srcWidth, CV_8UC4);
     Mat flipRgba(dstHeight, dstWidth, CV_8UC4);
-
-    // convert YUV -> RGBA
+//
+//    // convert YUV -> RGBA
     cv::cvtColor(mYuv, srcRgba, CV_YUV2RGBA_NV21);
-
-    // Rotate 90 degree
+//
+//    // Rotate 90 degree
     cv::transpose(srcRgba, flipRgba);
     cv::flip(flipRgba, flipRgba, 1);
+//
+    Mat destination;
 
+    // Detect the edges of the image by using a Canny detector
+    Canny(flipRgba, destination, 50, 200, 3);
 
-    LaneDetect(flipRgba, outStr);
+    vector<Vec4i> lines;
+    HoughLinesP(destination, lines, 1, CV_PI / 180, 50, 50, 10);
 
-    // copy to TextureView surface
     uchar *dbuf;
     uchar *sbuf;
-    dbuf = dstRgba.data;
+    dbuf = destination.data;
     sbuf = flipRgba.data;
+
     int i;
     for (i = 0; i < flipRgba.rows; i++) {
         dbuf = dstRgba.data + i * buf.stride * 4;
         memcpy(dbuf, sbuf, flipRgba.cols * 4);
         sbuf += flipRgba.cols * 4;
     }
+    for (size_t i = 0; i < lines.size(); i++) {
+        Vec4i l = lines[i];
+        //  display the result by drawing the lines.
+        cv::line(destination, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(0, 0, 255), 3, CV_AA);
+    }
 
-    // Draw some rectangles
-    Point p1(100, 100);
-    Point p2(300, 300);
-    cv::rectangle(dstRgba, p1, p2, Scalar(255, 255, 255));
-    cv::rectangle(dstRgba, Point(10, 10), Point(dstWidth - 1, dstHeight - 1),
-                  Scalar(255, 255, 255));
-    cv::rectangle(dstRgba, Point(100, 100), Point(dstWidth / 2, dstWidth / 2),
-                  Scalar(255, 255, 255));
-
-    LOGE("bob dstWidth=%d height=%d", dstWidth, dstHeight);
+    // write back
     ANativeWindow_unlockAndPost(win);
     ANativeWindow_release(win);
 
@@ -80,177 +112,221 @@ JNIEXPORT jstring JNICALL com_netvirta_netvisioncamera2_JNIUtils_detectLane(
 }
 
 
-void LaneDetect(Mat &img_rgba, char *outStr) {
-    Mat img_hsv;
-    Mat img_3;
-    Mat img_dis;
+//#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "Camera2Demo", __VA_ARGS__)
 
-    cv::Mat img_gray(img_rgba.size(), CV_8UC1);
-    cv::cvtColor(img_rgba, img_hsv, CV_RGB2HSV);
+//convert Y Plane from YUV_420_888 to RGBA and display
+extern "C" {
+JNIEXPORT void JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_GrayscaleDisplay(
+        JNIEnv *env,
+        jobject obj,
+        jint srcWidth,
+        jint srcHeight,
+        jint rowStride,
+        jobject srcBuffer,
+        jobject surface) {
 
-    int h_max;
-    int h_min;
-    int s_max;
-    int s_min;
-    int v_max;
-    int v_min;
+    uint8_t *srcLumaPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(srcBuffer));
+    /*
+    if (srcLumaPtr == nullptr) {
+        LOGE("srcLumaPtr null ERROR!");
+        return NULL;
+    }
+    */
 
-    uchar *buf;
-    buf = img_hsv.data;
+    ANativeWindow * window = ANativeWindow_fromSurface(env, surface);
+    ANativeWindow_acquire(window);
+    ANativeWindow_Buffer buffer;
+    //set output size and format
+    //only 3 formats are available:
+    //WINDOW_FORMAT_RGBA_8888(DEFAULT), WINDOW_FORMAT_RGBX_8888, WINDOW_FORMAT_RGB_565
+    ANativeWindow_setBuffersGeometry(window, 0, 0, WINDOW_FORMAT_RGBA_8888);
+    if (int32_t err = ANativeWindow_lock(window, &buffer, NULL)) {
+//        LOGE("ANativeWindow_lock failed with error code: %d\n", err);
+        ANativeWindow_release(window);
+    }
 
-    h_max = 100;
-    h_min = 50;
-    s_max = 240;
-    s_min = 20;
-    v_max = 255;
-    v_min = 110;
-
-    int i;
-    int j;
-    for (i = 0; i < img_hsv.rows; i++) {
-        for (j = 0; j < img_hsv.cols; j++) {
-            uchar *b;
-            b = buf + i * img_hsv.cols * 3 + j * 3;
-            if (((b[0] <= h_max) && (b[0] >= h_min) && ((b[1] <= s_max) && (b[1] >= s_min)) &&
-                 ((b[2] <= v_max) && (b[2] >= v_min)))) {
-                img_gray.at<uchar>(i, j) = 255;
-            } else {
-                img_gray.at<uchar>(i, j) = 0;
-            }
+    //to display grayscale, first convert the Y plane from YUV_420_888 to RGBA
+    //ANativeWindow_Buffer buffer;
+    uint8_t * outPtr = reinterpret_cast<uint8_t *>(buffer.bits);
+    for (size_t y = 0; y < srcHeight; y++)
+    {
+        uint8_t * rowPtr = srcLumaPtr + y * rowStride;
+        for (size_t x = 0; x < srcWidth; x++)
+        {
+            //for grayscale output, just duplicate the Y channel into R, G, B channels
+            *(outPtr++) = *rowPtr; //R
+            *(outPtr++) = *rowPtr; //G
+            *(outPtr++) = *rowPtr; //B
+            *(outPtr++) = 255; // gamma for RGBA_8888
+            ++rowPtr;
         }
     }
 
-    img_dis = img_gray;
-    cvtColor(img_dis, img_3, COLOR_GRAY2RGB);
-    cv::cvtColor(img_3, img_rgba, CV_RGB2RGBA);
-
-    cv::blur(img_gray, img_gray, Size(15, 15));
-    threshold(img_gray, img_gray, 100, 255, CV_THRESH_BINARY);
-
-#if 1
-    Mat img_contours;
-    Canny(img_gray, img_contours, 50, 250);
-
-    vector<Vec4i> lines;
-    HoughLinesP(img_contours, lines, 1, CV_PI / 180, 40, 100, 30);
-
-//    LOGE("bob lines count:%d", lines.size());
-    float alpha;
-    int width;
-    int height;
-    int distance;
-    int lr = 0;
-
-    b_line m_lines[10];
-    int line_count;
-    width = img_rgba.cols;
-    height = img_rgba.rows;
-    line_count = 0;
-    for (i = 0; i < 10; i++) {
-        m_lines[i].m_alpha = 0.0;
-        m_lines[i].m_dis = -1;
-    }
-    for (i = 0; i < lines.size(); i++) {
-        line(img_rgba, Point(lines[i][0], lines[i][1]),
-             Point(lines[i][2], lines[i][3]), Scalar(0, 0, 255), 3, 8);
-
-        distance = calc_distance(width, height, Point(lines[i][0], lines[i][1]), Point(lines[i][2], lines[i][3]), alpha,
-                                 lr);
-        if (m_lines[0].m_dis == -1) {
-            m_lines[0].m_dis = distance;
-            m_lines[0].m_alpha = alpha;
-            m_lines[0].m_lr = lr;
-            line_count = 1;
-        } else {
-            int j;
-            int findit = 0;
-            for (j = 0; j < line_count; j++) {
-                if ((m_lines[j].m_alpha < alpha + 5) && (m_lines[j].m_alpha > alpha - 5)) {
-                    if (m_lines[j].m_dis > distance) {
-                        m_lines[j].m_dis = distance;
-                        m_lines[j].m_alpha = alpha;
-                        m_lines[j].m_lr = lr;
-                    }
-                    findit = 1;
-                    break;
-                } else {
-
-                }
-            }
-            if (!findit) {
-                m_lines[line_count].m_alpha = alpha;
-                m_lines[line_count].m_dis = distance;
-                m_lines[line_count].m_lr = lr;
-                line_count++;
-            }
-        }
-
-        LOGE("bob lines dis (%d,%d) - (%d,%d) alpha:%f distance:%d\n", lines[i][0], lines[i][1], lines[i][2],
-             lines[i][3], alpha, distance);
-    }
-    LOGE("bob lines ------\n");
-    char *pbuf = outStr;
-    sprintf(pbuf, "count=%d;", line_count);
-    pbuf += strlen(pbuf);
-    for (i = 0; i < line_count; i++) {
-        LOGE("bob lines result:%d alpha:%f dis:%d lr:%d\n", i, m_lines[i].m_alpha, m_lines[i].m_dis, m_lines[i].m_lr);
-        sprintf(pbuf, "(%d,%d,%d);", (int) m_lines[i].m_alpha, m_lines[i].m_dis, m_lines[i].m_lr);
-        pbuf += strlen(pbuf);
-    }
-    LOGE("bob line detect done");
-#endif
+    ANativeWindow_unlockAndPost(window);
+    ANativeWindow_release(window);
 }
 
-int calc_distance(int width, int height, Point p0, Point p1, float &alpha, int &lr) {
+//do YUV_420_88 to RGBA_8888 conversion, flip, and display
+JNIEXPORT void JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_RGBADisplay(
+        JNIEnv *env,
+        jobject obj,
+        jint srcWidth,
+        jint srcHeight,
+        jint Y_rowStride,
+        jobject Y_Buffer,
+        jint UV_rowStride,
+        jobject U_Buffer,
+        jobject V_Buffer,
+        jobject surface) {
 
-    int x0;
-    int y0;
-    int x1;
-    int y1;
-    int x_org;
-    int y_org;
-    float a;
-    float b;
+    uint8_t *srcYPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(Y_Buffer));
+    uint8_t *srcUPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(U_Buffer));
+    uint8_t *srcVPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(V_Buffer));
+/*
+    if (srcYPtr == nullptr)
+    {
+        LOGE("srcYPtr null ERROR!");
+        return;
+    }
+    else if (srcUPtr == nullptr)
+    {
+        LOGE("srcUPtr null ERROR!");
+        return;
+    }
+    else if (srcVPtr == nullptr)
+    {
+        LOGE("srcVPtr null ERROR!");
+        return;
+    }
+*/
+    ANativeWindow * window = ANativeWindow_fromSurface(env, surface);
+    ANativeWindow_acquire(window);
+    ANativeWindow_Buffer buffer;
+    //set output size and format
+    //only 3 formats are available:
+    //WINDOW_FORMAT_RGBA_8888(DEFAULT), WINDOW_FORMAT_RGBX_8888, WINDOW_FORMAT_RGB_565
+    ANativeWindow_setBuffersGeometry(window, 0, 0, WINDOW_FORMAT_RGBA_8888);
+    if (int32_t err = ANativeWindow_lock(window, &buffer, NULL)) {
+//        LOGE("ANativeWindow_lock failed with error code: %d\n", err);
+        ANativeWindow_release(window);
+    }
 
-    lr = 0;
-    x_org = width / 2;
-    y_org = height;
+    size_t bufferSize = buffer.width * buffer.height * (size_t)4;
 
-    x0 = p0.x - x_org;
-    y0 = y_org - p0.y;
-
-    x1 = p1.x - x_org;
-    y1 = y_org - p1.y;
-
-    int d;
-
-    if ((x1 != x0) && (x1 != 0)) {
-        a = (float) (y1 - y0);
-        a = a / ((float) (x1 - x0));
-        b = y0 - a * (float) x0;
-        alpha = atan(a);
-        d = (int) ((b / a) * sin(alpha));
-
-        alpha *= 180 / PI;
-        if (((b > 0) && (a < 0)) || ((b < 0) && (a > 0))) {
-            lr = 1;
-        } else {
-            lr = 0;
-        }
-
-    } else {
-        a = 0;
-        b = 0;
-        alpha = 90;
-        d = x1;
-        if (d > 0) {
-            lr = 1;
-        } else {
-            lr = 0;
+    //YUV_420_888 to RGBA_8888 conversion and flip
+    uint8_t * outPtr = reinterpret_cast<uint8_t *>(buffer.bits);
+    for (size_t y = 0; y < srcHeight; y++)
+    {
+        uint8_t * Y_rowPtr = srcYPtr + y * Y_rowStride;
+        uint8_t * U_rowPtr = srcUPtr + (y >> 1) * UV_rowStride;
+        uint8_t * V_rowPtr = srcVPtr + (y >> 1) * UV_rowStride;
+        for (size_t x = 0; x < srcWidth; x++)
+        {
+            uint8_t Y = Y_rowPtr[x];
+            uint8_t U = U_rowPtr[(x >> 1)];
+            uint8_t V = V_rowPtr[(x >> 1)];
+            //from Wikipedia article YUV:
+            //Integer operation of ITU-R standard for YCbCr(8 bits per channel) to RGB888
+            //Y-Y, U-Cb, V-Cr
+            //U -= 128
+            //V -= 128
+            //R = Y + V + (V >> 2) + (V >> 3) + (V >> 5)
+            //  = Y + V * 1.40625;
+            //G = Y - ((U >> 2) + (U >> 4) + (U >> 5)) - ((V >> 1) + (V >> 3) + (V >> 4) + (V >> 5))
+            //  = Y - (U - 128) * 0.34375 - (V - 128) * 0.71875;
+            //B = Y + U + (U >> 1) + (U >> 2) + (U >> 6)
+            //  = Y + (U - 128) * 1.765625;
+            double R = (Y + (V - 128) * 1.40625);
+            double G = (Y - (U - 128) * 0.34375 - (V - 128) * 0.71875);
+            double B = (Y + (U - 128) * 1.765625);
+            *(outPtr + (--bufferSize)) = 255; // gamma for RGBA_8888
+            *(outPtr + (--bufferSize)) = (uint8_t) (B > 255 ? 255 : (B < 0 ? 0 : B));
+            *(outPtr + (--bufferSize)) = (uint8_t) (G > 255 ? 255 : (G < 0 ? 0 : G));
+            *(outPtr + (--bufferSize)) = (uint8_t) (R > 255 ? 255 : (R < 0 ? 0 : R));
         }
     }
 
-    d = abs(d);
-    return d;
+    ANativeWindow_unlockAndPost(window);
+    ANativeWindow_release(window);
+}
+
+//using another conversion method offered by @alijandro at a question in stackoverflow
+//https://stackoverflow.com/questions/46087343/jni-yuv-420-888-to-rgba-8888-conversion
+JNIEXPORT void JNICALL Java_tau_camera2demo_JNIUtils_RGBADisplay2(
+        JNIEnv *env,
+        jobject obj,
+        jint srcWidth,
+        jint srcHeight,
+        jint Y_rowStride,
+        jobject Y_Buffer,
+        jobject U_Buffer,
+        jobject V_Buffer,
+        jobject surface) {
+
+    uint8_t *srcYPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(Y_Buffer));
+    uint8_t *srcUPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(U_Buffer));
+    uint8_t *srcVPtr = reinterpret_cast<uint8_t *>(env->GetDirectBufferAddress(V_Buffer));
+/*
+    if (srcYPtr == nullptr)
+    {
+        LOGE("srcYPtr null ERROR!");
+        return;
+    }
+    else if (srcUPtr == nullptr)
+    {
+        LOGE("srcUPtr null ERROR!");
+        return;
+    }
+    else if (srcVPtr == nullptr)
+    {
+        LOGE("srcVPtr null ERROR!");
+        return;
+    }
+*/
+    ANativeWindow * window = ANativeWindow_fromSurface(env, surface);
+    ANativeWindow_acquire(window);
+    ANativeWindow_Buffer buffer;
+    //set output size and format
+    //only 3 formats are available:
+    //WINDOW_FORMAT_RGBA_8888(DEFAULT), WINDOW_FORMAT_RGBX_8888, WINDOW_FORMAT_RGB_565
+    ANativeWindow_setBuffersGeometry(window, 0, 0, WINDOW_FORMAT_RGBA_8888);
+    if (int32_t err = ANativeWindow_lock(window, &buffer, NULL)) {
+//        LOGE("ANativeWindow_lock failed with error code: %d\n", err);
+        ANativeWindow_release(window);
+    }
+
+    size_t bufferSize = buffer.width * buffer.height * (size_t)4;
+
+    //YUV_420_888 to RGBA_8888 conversion
+    uint8_t * outPtr = reinterpret_cast<uint8_t *>(buffer.bits);
+    for (size_t y = 0; y < srcHeight; y++)
+    {
+        uint8_t * Y_rowPtr = srcYPtr + y * Y_rowStride;
+        uint8_t * U_rowPtr = srcUPtr + (y >> 1) * Y_rowStride / 2;
+        uint8_t * V_rowPtr = srcVPtr + (y >> 1) * Y_rowStride / 2;
+        for (size_t x = 0; x < srcWidth; x++)
+        {
+            //from Wikipedia article YUV:
+            //Integer operation of ITU-R standard for YCbCr(8 bits per channel) to RGB888
+            //Y-Y, U-Cb, V-Cr
+            //R = Y + V + (V >> 2) + (V >> 3) + (V >> 5);
+            //G = Y - ((U >> 2) + (U >> 4) + (U >> 5)) - ((V >> 1) + (V >> 3) + (V >> 4) + (V >> 5));
+            //B = Y + U + (U >> 1) + (U >> 2) + (U >> 6);
+            uint8_t Y = Y_rowPtr[x];
+            uint8_t U = U_rowPtr[(x >> 1)];
+            uint8_t V = V_rowPtr[(x >> 1)];
+            double R = ((Y-16) * 1.164 + (V-128) * 1.596);
+            double G = ((Y-16) * 1.164 - (U-128) * 0.392 - (V-128) * 0.813);
+            double B = ((Y-16) * 1.164 + (U-128) * 2.017);
+            *(outPtr + (--bufferSize)) = 255; // gamma for RGBA_8888
+            *(outPtr + (--bufferSize)) = (uint8_t) (B > 255 ? 255 : (B < 0 ? 0 : B));
+            *(outPtr + (--bufferSize)) = (uint8_t) (G > 255 ? 255 : (G < 0 ? 0 : G));
+            *(outPtr + (--bufferSize)) = (uint8_t) (R > 255 ? 255 : (R < 0 ? 0 : R));
+        }
+    }
+
+    ANativeWindow_unlockAndPost(window);
+    ANativeWindow_release(window);
+}
 }
 
