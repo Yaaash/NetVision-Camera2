@@ -35,12 +35,15 @@ import android.util.Size
 import android.util.SparseIntArray
 import android.view.*
 import android.widget.Toast
-import com.netvirta.netvisioncamera2.*
+import com.netvirta.netvisioncamera2.AutoFitTextureView
+import com.netvirta.netvisioncamera2.JNIUtils
+import com.netvirta.netvisioncamera2.R
 import kotlinx.android.synthetic.main.fragment_camera.*
 import org.opencv.android.Utils
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.lang.Long.signum
 import java.util.Arrays
 import java.util.Collections
 import java.util.concurrent.Semaphore
@@ -894,4 +897,14 @@ class CameraFragment : Fragment(), View.OnClickListener,
         @JvmStatic
         fun newInstance(): CameraFragment = CameraFragment()
     }
+
+    class CompareSizesByArea : Comparator<Size> {
+
+        // We cast here to ensure the multiplications won't overflow
+        override fun compare(lhs: Size, rhs: Size) =
+            signum(lhs.width.toLong() * lhs.height - rhs.width.toLong() * rhs.height)
+
+    }
 }
+
+
