@@ -1,80 +1,33 @@
+/*
+ * Copyright 2017 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.netvirta.netvisioncamera2
 
-import android.app.Activity
-import android.content.pm.ActivityInfo
-import android.os.Bundle
-import android.view.WindowManager
-import kotlinx.android.synthetic.main.activity_camera.*
-import org.opencv.android.CameraBridgeViewBase
 
-/**
- * Show [MyGLSurfaceView] and preview visual aids from C++ Processing
- *
- * @author Yashika
- */
-class CameraActivity : Activity() {
+import android.os.Bundle
+import android.support.v7.app.AppCompatActivity
+import com.example.android.camera2basic.CameraFragment
+
+class CameraActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        )
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-
         setContentView(R.layout.activity_camera)
-        setListeners()
+        savedInstanceState ?: supportFragmentManager.beginTransaction()
+            .replace(R.id.container, CameraFragment.newInstance())
+            .commit()
     }
 
-    private fun setListeners() {
-        /**
-         * Set Camera Change listener
-         */
-        camera_switch?.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                gl_surface_view?.setFrontFacing(true)
-                gl_surface_view?.setCameraIndex(CameraBridgeViewBase.CAMERA_ID_FRONT)
-            } else {
-                gl_surface_view?.setFrontFacing(false)
-                gl_surface_view?.setCameraIndex(CameraBridgeViewBase.CAMERA_ID_BACK)
-            }
-        }
-
-        /**
-         * Set maximum preview size for Surface View
-         */
-        gl_surface_view?.setMaxCameraPreviewSize(1280, 920)
-        gl_surface_view?.cameraTextureListener = gl_surface_view
-    }
-
-    override fun onResume() {
-        /**
-         * Resume Surface View
-         */
-        gl_surface_view?.onResume()
-        super.onResume()
-    }
-
-
-    public override fun onPause() {
-        /**
-         * Pause Surface View
-         */
-        gl_surface_view?.onPause()
-        super.onPause()
-    }
-
-    companion object {
-        init {
-            /**
-             * Load Libraries using Cmake
-             */
-            System.loadLibrary("native-lib")
-        }
-    }
 }
