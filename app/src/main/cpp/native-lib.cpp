@@ -2,10 +2,11 @@
 #include "com_netvirta_netvisioncamera2_JNIUtils.h"
 #include "opencv2/imgcodecs.hpp"
 
-JNIEXPORT void JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine
-        (JNIEnv *env, jclass, jint srcWidth, jint srcHeight, jobject srcBuffer, jobject surface, jstring path, jlong destinationAddress){
+JNIEXPORT jstring JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine
+        (JNIEnv *env, jclass, jint srcWidth, jint srcHeight, jobject srcBuffer, jobject surface, jstring path,
+         jlong destinationAddress) {
 
-    Mat &finalDestination=*(Mat*)destinationAddress;
+    Mat &finalDestination = *(Mat *) destinationAddress;
 
     const char *filePathNativeString = env->GetStringUTFChars(path, NULL);
 
@@ -14,9 +15,8 @@ JNIEXPORT void JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine
 
     if (srcLumaPtr == nullptr) {
         // pointer is null for buffer
-        return;
+        return (env)->NewStringUTF("Src is Null");
     }
-
     // create YUV mat file from buffer
     cv::Mat mYuv(srcHeight + srcHeight / 2, srcWidth, CV_8UC1, srcLumaPtr);
 
@@ -27,17 +27,11 @@ JNIEXPORT void JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine
     dstHeight = srcWidth;
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, surface);
-    ANativeWindow_acquire(win);
+//    ANativeWindow_acquire(win);
 
     ANativeWindow_Buffer buf;
 
-    ANativeWindow_setBuffersGeometry(win, dstWidth, dstHeight, 0 /*format unchanged*/);
-
-    if (int32_t err = ANativeWindow_lock(win, &buf, NULL)) {
-        // Couldn't lock ANativeWindow
-        ANativeWindow_release(win);
-        return;
-    }
+    ANativeWindow_setBuffersGeometry(win, srcWidth, srcHeight, 0 /*format unchanged*/);
 
     // create buffer for destination
     uint8_t *dstLumaPtr = reinterpret_cast<uint8_t *>(buf.bits);
@@ -65,9 +59,14 @@ JNIEXPORT void JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine
         cv::line(finalDestination, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(255, 0, 0), 3, CV_AA);
     }
 
+    if (int32_t err = ANativeWindow_lock(win, &buf, NULL)) {
+        // Couldn't lock ANativeWindow
+        ANativeWindow_release(win);
+        __android_log_print(ANDROID_LOG_ERROR, "yashika", "ANativeWindow_lock failed with error code %d", err);
+        return (env)->NewStringUTF("ANativeWindow_lock failed");
+    }
 
     ANativeWindow_unlockAndPost(win);
     ANativeWindow_release(win);
-
-    return ;
+    return env->NewStringUTF(reinterpret_cast<const char *>(lines.size()));
 }
