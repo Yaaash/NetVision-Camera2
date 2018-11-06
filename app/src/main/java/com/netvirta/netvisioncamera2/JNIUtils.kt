@@ -1,9 +1,12 @@
 package com.netvirta.netvisioncamera2
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.media.Image
+import android.util.Log
 import android.view.Surface
+import android.widget.Toast
 import org.opencv.core.CvType
 import org.opencv.core.CvType.CV_8UC4
 import org.opencv.core.Mat
@@ -89,7 +92,7 @@ object JNIUtils {
      * YUV_420_888, surface must be YV12 and have been configured with
      * `configureSurface()`.
      */
-    fun detectLine(sourceImage: Image, surface: Surface, path: String): Mat {
+    fun detectLine(context : Context?, sourceImage: Image, surface: Surface, path: String): Mat {
 
         if (sourceImage.format != ImageFormat.YUV_420_888) {
             throw IllegalArgumentException("sourceImage must have format YUV_420_888.")
@@ -105,14 +108,17 @@ object JNIUtils {
             )
         }
         val destinationMat = Mat(sourceImage.height, sourceImage.width, CV_8UC4)
-        detectLine(
+        Log.e("Yashika", sourceImage.width.toString())
+        Log.e("Yashika", sourceImage.height.toString())
+       val lines =  detectLine(
             sourceImage.width, sourceImage.height, planes[0].buffer, surface, path, destinationMat.nativeObjAddr
         )
+        Toast.makeText(context, "Lines detected : $lines", Toast.LENGTH_LONG).show()
         return destinationMat
     }
 
     private external fun detectLine(
         width: Int, height: Int, imageBuffer: ByteBuffer,
         surface: Surface, filePath: String, destinationMatAddr : Long
-    )
+    ): String
 }

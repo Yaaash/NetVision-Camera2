@@ -43,7 +43,7 @@ extern "C" {
  * Method:    detectLine
  * Signature: (IILjava/nio/ByteBuffer;Ljava/lang/Object;Ljava/lang/String;)Ljava/lang/String;
  */
-JNIEXPORT void JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine
+JNIEXPORT jstring JNICALL Java_com_netvirta_netvisioncamera2_JNIUtils_detectLine
   (JNIEnv *, jclass, jint, jint, jobject, jobject, jstring, jlong);
 
 #ifdef __cplusplus

@@ -156,8 +156,8 @@ class CameraFragment : Fragment(), View.OnClickListener,
                     return@post
                 }
                 // Process image
-                val result = JNIUtils.detectLine(image, surface!!, getFileName())
-                Toast.makeText(activity, "${result.cols()} + ${result.rows()}", Toast.LENGTH_LONG).show()
+                val result = JNIUtils.detectLine(activity?.applicationContext, image, surface!!, getFileName())
+//                Toast.makeText(activity, "${result.cols()} + ${result.rows()}", Toast.LENGTH_LONG).show()
                 val bitmap = Bitmap.createBitmap(result.cols(), result.rows(), Bitmap.Config.ARGB_8888)
                 Utils.matToBitmap(result, bitmap)
 
